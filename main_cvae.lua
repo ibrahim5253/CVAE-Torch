@@ -14,8 +14,8 @@ require 'KLDCriterion'
 require 'GaussianCriterion'
 require 'Sampler'
 require 'Merger'
---require 'dataset-mnist'
-require 'cifar10'
+require 'dataset-mnist'
+--require 'cifar10'
 
 util = paths.dofile('util.lua')
 
@@ -80,7 +80,7 @@ local SpatialBatchNormalization = nn.SpatialBatchNormalization
 
 
 -- input is (nc) x 64 x 64
-local nc = 3
+local nc = 1
 
 netD:add(SpatialConvolution(nc, opt.ndf, 3, 3, 1, 1, 1, 1))
 netD:add(nn.LeakyReLU(0.2, true))
@@ -110,39 +110,40 @@ local nz = opt.nz
 --local encoder = VAE.get_encoder(nc, opt.ndf, nz)
 --local decoder = VAE.get_decoder(nc, opt.ngf, nz)
 local gen     = VAE.get_generator(nc, opt.ngf, nz)
-local gendec  = VAE.get_gendec(nc, opt.ngf)
+--[[
+--local gendec  = VAE.get_gendec(nc, opt.ngf)
 
 
 --local input_node = nn.Identity()()
 --local mean_node, log_var_node = encoder(input_node):split(2)
 --local z = nn.Sampler()({mean_node, log_var_node})
-local zp = nn.Identity()()
+--local zp = nn.Identity()()
 
 
 --local decoder_output = decoder(z)
-local gen_output = gen(zp)
+--local gen_output = gen(zp)
 
 -- Debug this
 --local gen_dec_output = nn.Merger()({decoder_output, gen_output})
-print("Reached here")
 
-local reconstruction_node = gendec(gen_output)
+--local reconstruction_node = gendec(gen_output)
 ---------------
 local model = nn.gModule({zp},{reconstruction_node})
 criterion = nn.MSECriterion():cuda()
+--]]
 gan_criterion = nn.BCECriterion():cuda()
-
+--[[
 print("Model graph built")
 
 encoder:apply(weights_init)
 decoder:apply(weights_init)
+--]]
 gen:apply(weights_init)
-gendec:apply(weights_init)
+--gendec:apply(weights_init)
 netD:apply(weights_init)
 
-KLD = nn.KLDCriterion():cuda()
+--KLD = nn.KLDCriterion():cuda()
 
-local parameters, gradients = model:getParameters()
 
 ---------------------------------------------------------------------------
 optimState = {
@@ -157,13 +158,13 @@ optimStateD = {
 local input = torch.Tensor(opt.batchSize, nc, opt.fineSize, opt.fineSize)
 local gen_noise =  torch.Tensor(opt.batchSize, nz, 1, 1)
 local label = torch.Tensor(opt.batchSize)
-local real_disl = torch.Tensor(opt.batchSize, 512, 4, 4)
-local fake_disl = torch.Tensor(opt.batchSize, 512, 4, 4)
+--local real_disl = torch.Tensor(opt.batchSize, 512, 4, 4)
+--local fake_disl = torch.Tensor(opt.batchSize, 512, 4, 4)
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
 local data_tm = torch.Timer()
 local lowerbound = 0
-local my_data = trainData--mnist.loadTrainSet(60000, {32, 32})
+local my_data = --[[trainData--]]mnist.loadTrainSet(60000, {32, 32})
 
 if opt.gpu > 0 then
    require 'cunn'
@@ -171,33 +172,35 @@ if opt.gpu > 0 then
    input = input:cuda()
    gen_noise = gen_noise:cuda()
    label = label:cuda()
+   --[[
    real_disl = real_disl:cuda()
    fake_disl = fake_disl:cuda()
    decoder = util.cudnn(decoder)
    encoder = util.cudnn(encoder)
+   --]]
    gen     = util.cudnn(gen)
-   gendec  = util.cudnn(gendec)
+-- gendec  = util.cudnn(gendec)
    netD    = util.cudnn(netD)
-   encoder:cuda()
-   decoder:cuda()
+   --encoder:cuda()
+   --decoder:cuda()
    gen:cuda()
-   gendec:cuda()
+   --gendec:cuda()
    netD:cuda()
    my_data.data:cuda()
 end
 
+--[[
 local data_mean, data_std = my_data.data:mean(), my_data.data:std()
 my_data.data:add(-data_mean)
 my_data.data:mul(1/data_std)
+--]]
 
---my_data:normalizeGlobal()
+my_data:normalizeGlobal()
 
 if opt.display then
     disp = require 'display'
     require 'image'
 end
-
-local parametersD, gradParametersD = netD:getParameters()
 
 --[[
 local samples = my_data.data[{{1,64}}]
@@ -214,6 +217,9 @@ end
 image.save('test.jpg', image.toDisplayTensor{input=im_tensor, nrow=8})
 --]]
 
+
+local parametersD, gradParametersD = netD:getParameters()
+local parameters, gradients = gen:getParameters()
 
 -- train
 for epoch = 1, opt.niter do
@@ -242,15 +248,15 @@ for epoch = 1, opt.niter do
 
 	   gen_noise:normal(0, 1)
 	   label:fill(fake_label)
-	   model:forward({input, gen_noise})
+	   gen:forward(gen_noise)
 
 	   -- train with reconstructed image
-	   local output = netD:forward(model.output[1])
+	   local output = netD:forward(gen.output)
 --	   print(netD:get(10).output:size())
 --	   fake_disl:copy(netD:get(Disl).output)
 	   local errD_fake = gan_criterion:forward(output, label)
 	   local df_do = gan_criterion:backward(output, label)
-	   netD:backward(model.output[1], df_do)
+	   netD:backward(gen.output, df_do)
 
 	   errD = errD_real + errD_fake
 
@@ -265,46 +271,42 @@ for epoch = 1, opt.niter do
 	    -- Taken from DCGAN:
 	    --encoder:apply(function(m) if torch.type(m):find('Convolution') then m.bias:zero() end end)
 
-	    model:zeroGradParameters()
+	    gen:zeroGradParameters()
 --	    local err = criterion:forward(fake_disl, real_disl) -- replacing MSE criteria, autoencoding beyond pixel
-
+--[[
 	    local KLDerr = KLD:forward(model.output[2], model.output[3])
 	    local dKLD_dmu, dKLD_dlog_var = unpack(KLD:backward(model.output[2], model.output[3]))
-	    
+--]]	    
 	    label:fill(real_label)
 
 	    local output = netD.output
 	    local errG = gan_criterion:forward(output, label)
 	    local df_do = gan_criterion:backward(output, label)
-	    local df_dg = netD:updateGradInput(model.output[1], df_do)
-
+	    local df_dg = netD:updateGradInput(gen.output, df_do)
+--[[
 	    local mse = criterion:forward(model.output[1], input)
 	    local dm_dg = criterion:backward(model.output[1], input)
+--]]
+--	    error_grads = { df_dg+dm_dg, dKLD_dmu, dKLD_dlog_var}
 
-	    error_grads = { df_dg+dm_dg, dKLD_dmu, dKLD_dlog_var}
+	    gen:backward(gen_noise, df_dg)
 
-	    model:backward({input, gen_noise}, error_grads)
 
-	    local batchlowerbound = mse + KLDerr + errG
-
-	    return batchlowerbound, gradients
+	    return errG, gradients
 	end
 
       tm:reset()
 
       -- Update model
-      optim.adam(fDx, parametersD, optimStateD)
-      if ((i-1)/4)%4==0 then
-	      print('Hi')
-	      x, batchlowerbound = optim.adam(fx, parameters, optimState)
-      end
-      lowerbound = lowerbound + (batchlowerbound and batchlowerbound[1] or 0)
+      theta_D, loss_D = optim.adam(fDx, parametersD, optimStateD)
+      theta_G, loss_G = optim.adam(fx, parameters, optimState)
+      lowerbound = lowerbound + loss_D[1] + loss_G[1]
 
       -- display
       counter = counter + 1
       if counter % 1600 == 0 and opt.display then
 	    	--gen_noise:normal(0,1)
-          local reconstruction, mean, log_var = unpack(model:forward({input, gen_noise}))
+          local reconstruction = gen:forward(gen_noise)
           if reconstruction then
             --disp.image(fake, {win=opt.display_id, title=opt.name})
          	 image.save(('%s/epoch_%d_iter_%d_real.jpg'):format(opt.display_out, epoch, counter), image.toDisplayTensor{input=input, nrow=2})
@@ -328,13 +330,17 @@ for epoch = 1, opt.niter do
    lowerboundlist = torch.Tensor(1,1):fill(lowerbound/(epoch * math.min(my_data.data:size(1), opt.ntrain)))
 
    paths.mkdir('/media/sdj/._/checkpoints')
+   --[[
    util.save('/media/sdj/._/checkpoints/' .. opt.name .. '_' .. epoch .. '_encoder.t7', encoder, opt.gpu)
    util.save('/media/sdj/._/checkpoints/' .. opt.name .. '_' .. epoch .. '_decoder.t7', decoder, opt.gpu)
    util.save('/media/sdj/._/checkpoints/' .. opt.name .. '_' .. epoch .. '_gendec.t7', gendec, opt.gpu)
+   --]]
    util.save('/media/sdj/._/checkpoints/' .. opt.name .. '_' .. epoch .. '_gen.t7', gen, opt.gpu)
 
+   --[[
    torch.save('/media/sdj/._/checkpoints/' .. epoch .. '_mean.t7', model.output[2])
    torch.save('/media/sdj/._/checkpoints/' .. epoch .. '_log_var.t7', model.output[3])
+   -]]
 --   util.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_state.t7', state, opt.gpu)
 --   util.save('checkpoints/' .. opt.name .. '_' .. epoch .. '_lowerbound.t7', torch.Tensor(lowerboundlist), opt.gpu)
 --   parameters = nil

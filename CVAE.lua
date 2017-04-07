@@ -85,8 +85,15 @@ function CVAE.get_generator(nc, ngf, nz)
     netG:add(nn.ReLU(true))
 
     netG:add(nn.SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
-    netG:add(nn.SpatialBatchNormalization(ngf * 1))
+    netG:add(nn.SpatialBatchNormalization(ngf * 2))
     netG:add(nn.ReLU(true))
+
+    netG:add(nn.SpatialFullConvolution(ngf*2, ngf, 4, 4, 2, 2, 1, 1))
+    netG:add(nn.SpatialBatchNormalization(ngf)):add(nn.ReLU(true))
+
+    -- 32 -> 32
+    netG:add(nn.SpatialFullConvolution(ngf, nc, 3, 3, 1, 1, 1, 1))
+    netG:add(nn.Tanh())
 
     return netG:cuda()
 end

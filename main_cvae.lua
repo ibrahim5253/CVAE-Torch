@@ -107,28 +107,28 @@ print("Discriminator constructed")
 
 local nz = opt.nz
 
-local encoder = VAE.get_encoder(nc, opt.ndf, nz)
-local decoder = VAE.get_decoder(nc, opt.ngf, nz)
+--local encoder = VAE.get_encoder(nc, opt.ndf, nz)
+--local decoder = VAE.get_decoder(nc, opt.ngf, nz)
 local gen     = VAE.get_generator(nc, opt.ngf, nz)
 local gendec  = VAE.get_gendec(nc, opt.ngf)
 
 
-local input_node = nn.Identity()()
-local mean_node, log_var_node = encoder(input_node):split(2)
-local z = nn.Sampler()({mean_node, log_var_node})
+--local input_node = nn.Identity()()
+--local mean_node, log_var_node = encoder(input_node):split(2)
+--local z = nn.Sampler()({mean_node, log_var_node})
 local zp = nn.Identity()()
 
 
-local decoder_output = decoder(z)
+--local decoder_output = decoder(z)
 local gen_output = gen(zp)
 
 -- Debug this
-local gen_dec_output = nn.Merger()({decoder_output, gen_output})
+--local gen_dec_output = nn.Merger()({decoder_output, gen_output})
 print("Reached here")
 
-local reconstruction_node = gendec(gen_dec_output)
+local reconstruction_node = gendec(gen_output)
 ---------------
-local model = nn.gModule({input_node, zp},{reconstruction_node, mean_node, log_var_node})
+local model = nn.gModule({zp},{reconstruction_node})
 criterion = nn.MSECriterion():cuda()
 gan_criterion = nn.BCECriterion():cuda()
 
@@ -294,8 +294,11 @@ for epoch = 1, opt.niter do
 
       -- Update model
       optim.adam(fDx, parametersD, optimStateD)
-      x, batchlowerbound = optim.adam(fx, parameters, optimState)
-      lowerbound = lowerbound + batchlowerbound[1]
+      if ((i-1)/4)%4==0 then
+	      print('Hi')
+	      x, batchlowerbound = optim.adam(fx, parameters, optimState)
+      end
+      lowerbound = lowerbound + (batchlowerbound and batchlowerbound[1] or 0)
 
       -- display
       counter = counter + 1

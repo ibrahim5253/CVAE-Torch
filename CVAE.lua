@@ -54,21 +54,21 @@ function CVAE.get_decoder(nc, ngf, latent_variable_size)
     decoder:add(nn.ReLU(true))
 
     -- 8 -> 16
-    decoder:add(nn.SpatialFullConvolution(ngf * 4, ngf * 1, 4, 4, 2, 2, 1, 1))
-    decoder:add(nn.SpatialBatchNormalization(ngf * 1))
+    decoder:add(nn.SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
+    decoder:add(nn.SpatialBatchNormalization(ngf * 2))
     decoder:add(nn.ReLU(true))
-    --[[ *** Merge with generator from here ***
+    --[[ *** Merge with generator from here ***--]]
 
     decoder:add(nn.SpatialFullConvolution(ngf * 2, ngf, 4, 4, 2, 2, 1, 1))
     decoder:add(nn.SpatialBatchNormalization(ngf))
     decoder:add(nn.ReLU(true))
 
-    mean_logvar = nn.ConcatTable()
-    mean_logvar:add(nn.SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
-    mean_logvar:add(nn.SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
-    decoder:add(mean_logvar)
+--    mean_logvar = nn.ConcatTable()
+    decoder:add(nn.SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+--    mean_logvar:add(nn.SpatialFullConvolution(ngf, nc, 4, 4, 2, 2, 1, 1))
+--    decoder:add(mean_logvar)
 
---    decoder:add(nn.Tanh())
+    decoder:add(nn.Tanh())
 --    --]]
 
     return decoder:cuda()
